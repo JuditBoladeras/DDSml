@@ -48,7 +48,7 @@ names(events)
 dim(events)
 
 features$Name <- stringr::str_replace_all(features$Name, " ", " ")
-#events <- read.csv(("data/raw/events.csv"), header = FALSE, col.names = features$Name, colClasses = features$Type, na.strings = "-")
+#Extraemos substring del vector 
 events$srcip[0] <- stringi::stri_sub(events$srcip[0], 4, nchar(events$script[0]))
 ```
 ```{r events_stats2}
@@ -80,14 +80,13 @@ ggplot(df_events) +
 ```
 
 ```{r events_stats4}
-#Se intentan eliminar los valores NA pero no va :(
+#Modificamos valores NA
 colsNA <- apply(df_events, 2, function(x) sum(is.na(x)))
 cna <- data.frame(name = names(colsNA) [colsNA > 0], 
                   type = features$Type[features$Name %in% names(colsNA)[colsNA >0]])
-df_events[is.na(df_events$dsport)] <- -1
-#df_events[is.na(df_events$service)] <- "unknown"
-df_events[is.na(df_events$sport)] <- -1
-df_events[is.na(df_events$attack_cat)] <- "unknown"
+df_events$dsport[is.na(df_events$dsport)] <- -1
+df_events$service[is.na(df_events$service)] <- "unknown"
+df_events$sport[is.na(df_events$sport)] <- -1
 
 
 #Columnes factor
@@ -99,6 +98,7 @@ df_events$service <- as.factor(df_events$service)
 df_events$sport <- as.factor(df_events$sport)
 df_events$attack_cat <- as.factor(df_events$attack_cat)
 ```
+
 
 ### Data enrichment
 
@@ -158,12 +158,30 @@ predictorsNames <- names(events)[names(events) != outcomeName]
 
 prop.table(table(events$Label))
 ```
+```{r feat_eng_df_events, echo=FALSE}
+# Prueba con df_events
+# El modelo requiere nombres de columna simples y features numericas o factor
+names(df_events) <- stringr::str_replace_all(names(df_events), "_", "")
+df_events <- as.data.frame(unclass(df_events), stringsAsFactors = TRUE)
+
+# Etiquetamos la columna Label con valores categoricos
+df_events$Label <- ifelse(df_events$Label == 1, "ATTACK", "NORMAL")
+df_events$Label <- as.factor(df_events$Label)
+
+outcomeName <- 'Label'
+predictorsNames <- names(df_events)[names(df_events) != outcomeName]
+
+prop.table(table(df_events$Label))
+```
 
 ## Build model
 
 ```{r model, echo=FALSE}
 #Contruccion de modelo con los datos anteriores
-esquisse::esquisser(events)
+ggplot(df_events) +
+  aes(x = Label) +
+  geom_bar(fill = "#112446") +
+  theme_minimal()
 
 ```
 ### Create train and test data sets
