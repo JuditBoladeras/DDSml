@@ -1,0 +1,235 @@
+---
+title: "Supervised Learning"
+author: "Humbert Costas"
+date: "6/2/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library("jsonlite", warn.conflicts = FALSE)
+library("ggplot2", warn.conflicts = FALSE)
+library("lattice", warn.conflicts = FALSE)
+library("caret", warn.conflicts = FALSE)
+library("gbm", warn.conflicts = FALSE)
+library("pROC", warn.conflicts = FALSE)
+
+set.seed(42)
+```
+
+# Detección de ataques con aprendizaje supervisado
+
+El siguiente ejercicio consiste en crear un modelo entrenado capaz de detectar ataques a partir de logs de un firewall.
+Para este propósito, se realizará una prueba de concepto con una pequeña muestra de logs previamente etiquetados como tráfico normal o ataque.
+
+## Data sets
+
+Se proporcionan los siguentes archivos:
+
+ - features.csv
+ - events.csv
+
+```{r tidy_data, echo=FALSE}
+if (!dir.exists("data")) dir.create("data")
+if (!dir.exists("data/raw")) dir.create("data/raw")
+
+events <- read.csv("data/raw/events.csv")
+features <- read.csv("data/raw/features.csv")
+
+```
+
+### Events analysis
+
+```{r events_stats, echo=FALSE}
+#Basic analysis
+class(events)
+names(events)
+dim(events)
+
+features$Name <- stringr::str_replace_all(features$Name, " ", " ")
+#events <- read.csv(("data/raw/events.csv"), header = FALSE, col.names = features$Name, colClasses = features$Type, na.strings = "-")
+events$srcip[0] <- stringi::stri_sub(events$srcip[0], 4, nchar(events$script[0]))
+```
+```{r events_stats2}
+summary(events)
+str(events)
+```
+```{r events_stats3}
+#Reducir tamaño events
+df_events<- dplyr::sample_frac(events, 0.001)
+```
+
+```{r graphic_type, echo=FALSE}
+#Analizamos los datos
+ggplot(df_events) +
+  aes(x = service, fill = dsport) +
+  geom_bar() +
+  scale_fill_gradient() +
+  theme_minimal()
+
+```
+
+```{r graphic_type2, echo=FALSE}
+#Analizamos los datos
+ggplot(df_events) +
+  aes(x = attack_cat, colour = sport) +
+  geom_bar(fill = "#112446") +
+  scale_color_gradient() +
+  theme_minimal()
+```
+
+```{r events_stats4}
+#Se intentan eliminar los valores NA pero no va :(
+colsNA <- apply(df_events, 2, function(x) sum(is.na(x)))
+cna <- data.frame(name = names(colsNA) [colsNA > 0], 
+                  type = features$Type[features$Name %in% names(colsNA)[colsNA >0]])
+df_events[is.na(df_events$dsport)] <- -1
+#df_events[is.na(df_events$service)] <- "unknown"
+df_events[is.na(df_events$sport)] <- -1
+df_events[is.na(df_events$attack_cat)] <- "unknown"
+
+
+#Columnes factor
+cfa <- sapply(events[, sapply(events, class) == 'character'], function(x) length(unique(x)))
+cfa <- names(cfa[cfa < 20])
+
+df_events$dsport <- as.factor(df_events$dsport)
+df_events$service <- as.factor(df_events$service)
+df_events$sport <- as.factor(df_events$sport)
+df_events$attack_cat <- as.factor(df_events$attack_cat)
+```
+
+### Data enrichment
+
+```{r data_enrich, echo=FALSE}
+#Analizamos la columna type
+table(features$Type)
+```
+```{r graphic_type, echo=FALSE}
+#Analizamos los datos
+library(ggplot2)
+
+ggplot(features) +
+ aes(x = Type, group = Name) +
+ geom_bar(fill = "#112446") +
+ theme_minimal()
+
+```
+
+```{r data_enrich, echo=FALSE}
+#Elimnamos columnas type repetidos
+features$Type[features$Type %in% c("binary","Binary")] <- "Numeric"
+features$Type[features$Type %in% c("integer","Integer")] <- "Numeric"
+features$Type[features$Type %in% c("float","Float")] <- "Numeric"
+features$Type[features$Type %in% c("nominal","Timestamp")] <- "Character"
+
+features.names <- c("No.", "Name", "Type", "Description")
+names(features) <- features.names
+
+table(features$Type)
+
+```
+
+```{r graphic_type2, echo=FALSE}
+#Analizamos los datos
+library(ggplot2)
+
+ggplot(features) +
+ aes(x = Type, group = Name) +
+ geom_bar(fill = "#112446") +
+ theme_minimal()
+
+```
+
+## Feature engineering
+
+```{r feat_eng, echo=FALSE}
+# El modelo requiere nombres de columna simples y features numericas o factor
+names(events) <- stringr::str_replace_all(names(events), "_", "")
+events <- as.data.frame(unclass(events), stringsAsFactors = TRUE)
+
+# Etiquetamos la columna Label con valores categoricos
+events$Label <- ifelse(events$Label == 1, "ATTACK", "NORMAL")
+events$Label <- as.factor(events$Label)
+
+outcomeName <- 'Label'
+predictorsNames <- names(events)[names(events) != outcomeName]
+
+prop.table(table(events$Label))
+```
+
+## Build model
+
+```{r model, echo=FALSE}
+#Contruccion de modelo con los datos anteriores
+esquisse::esquisser(events)
+
+```
+### Create train and test data sets
+
+```{r train_test, echo=FALSE}
+splitIndex <- createDataPartition(events[,outcomeName], p = .75, list = FALSE, times = 1)
+trainDF <- events[ splitIndex,]
+testDF  <- events[-splitIndex,]
+
+```
+
+### Model definition
+
+```{r model_config, echo=FALSE}
+objControl <- trainControl(method = 'cv', 
+                           number = 3, 
+                           returnResamp = 'none', 
+                           summaryFunction = twoClassSummary, 
+                           classProbs = TRUE)
+```
+
+### Train model
+
+```{r model_train, echo=FALSE}
+objModel <- train(trainDF[,predictorsNames], trainDF[,outcomeName], 
+                  method='gbm', 
+                  trControl=objControl,  
+                  metric = "ROC",
+                  preProc = c("center", "scale"))
+summary(objModel)
+```
+
+### Test model
+
+```{r model_test, echo=FALSE}
+predictions <- predict(object = objModel, testDF[, predictorsNames], type = 'raw')
+head(predictions)
+
+```
+
+## Evaluate model
+
+```{r model_eval, echo=FALSE}
+print(postResample(pred=predictions, obs=as.factor(testDF[,outcomeName])))
+
+```
+
+
+```{r predic_prob}
+# probabilites 
+predictions <- predict(object=objModel, testDF[,predictorsNames], type='prob')
+auc <- roc(ifelse(testDF[,outcomeName]=="ATTACK",1,0), predictions[[2]])
+print(auc$auc)
+```
+
+
+
+```{r var_importance}
+plot(varImp(objModel,scale=F))
+```
+
+
+## Conclusion
+
+```{r conclusion, echo=FALSE}
+
+
+```
+
