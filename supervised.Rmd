@@ -61,7 +61,7 @@ df_events<- dplyr::sample_frac(events, 0.001)
 ```
 
 ```{r graphic_type, echo=FALSE}
-#Analizamos los datos
+#Analizamos los datos de serive - dpsort
 ggplot(df_events) +
   aes(x = service, fill = dsport) +
   geom_bar() +
@@ -71,7 +71,7 @@ ggplot(df_events) +
 ```
 
 ```{r graphic_type2, echo=FALSE}
-#Analizamos los datos
+#Analizamos los datos de attack_cat - sport
 ggplot(df_events) +
   aes(x = attack_cat, colour = sport) +
   geom_bar(fill = "#112446") +
@@ -89,7 +89,7 @@ df_events$service[is.na(df_events$service)] <- "unknown"
 df_events$sport[is.na(df_events$sport)] <- -1
 
 
-#Columnes factor
+#Columnas factor
 cfa <- sapply(events[, sapply(events, class) == 'character'], function(x) length(unique(x)))
 cfa <- names(cfa[cfa < 20])
 
@@ -107,7 +107,7 @@ df_events$attack_cat <- as.factor(df_events$attack_cat)
 table(features$Type)
 ```
 ```{r graphic_type, echo=FALSE}
-#Analizamos los datos
+#Analizamos los datos de type
 library(ggplot2)
 
 ggplot(features) +
@@ -118,7 +118,7 @@ ggplot(features) +
 ```
 
 ```{r data_enrich, echo=FALSE}
-#Elimnamos columnas type repetidos
+#Elimnamos columnas type repetidas y las agrupamos
 features$Type[features$Type %in% c("binary","Binary")] <- "Numeric"
 features$Type[features$Type %in% c("integer","Integer")] <- "Numeric"
 features$Type[features$Type %in% c("float","Float")] <- "Numeric"
@@ -132,7 +132,7 @@ table(features$Type)
 ```
 
 ```{r graphic_type2, echo=FALSE}
-#Analizamos los datos
+#Analizamos los datos de type actuales
 library(ggplot2)
 
 ggplot(features) +
@@ -248,6 +248,25 @@ plot(varImp(objModel,scale=F))
 
 ```{r conclusion, echo=FALSE}
 
+#ATTACK
+prop.table(table(ATTACK = predictions$ATTACK))
+
+#NORMAL
+prop.table(table(NORMAL = predictions$NORMAL))
+
+#ATTACK
+ggplot(predictions) +
+  aes(x = ATTACK) +
+  geom_density(adjust = 1L, fill = "#112446") +
+  theme_minimal()
+
+
+#NORMAL
+ggplot(predictions) +
+  aes(x = NORMAL) +
+  geom_density(adjust = 1L, fill = "#112446") +
+  theme_minimal()
 
 ```
 
+Puede observarse que las gráficas parecen ser opuestas mientras que para el Attack tenemos mayor densidad inicialmente y menor al final con el Normal sucede al contrario.
